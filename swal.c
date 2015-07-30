@@ -243,7 +243,9 @@ int swal_append(swal_t* wal, const void* log, size_t loglen)
             memcpy(wal->ring_cache + wal->ring_cache_idx, p, thislen);
             wal->ring_cache_idx += thislen;
             if (wal->ring_cache_idx == wal->options.ring_cache_size)
+            {
                 wal->ring_cache_idx = 0;
+            }
             len -= thislen;
             p += thislen;
         }
@@ -273,7 +275,7 @@ int swal_sync_meta(swal_t* wal)
     return 0;
 }
 
-int swal_replay(swal_t* wal, size_t offset, int64_t limit_len, swal_reply_logfunc func, void* data)
+int swal_replay(swal_t* wal, size_t offset, int64_t limit_len, swal_replay_logfunc func, void* data)
 {
     size_t total = wal->meta->log_end_offset - offset;
     if (limit_len > 0 && limit_len < total)
@@ -334,6 +336,14 @@ int swal_replay(swal_t* wal, size_t offset, int64_t limit_len, swal_reply_logfun
     }
     return 0;
 }
+void swal_clear_replay_cache(swal_t* wal)
+{
+    if (NULL != wal->mmap_buf)
+    {
+        munmap(wal->mmap_buf, wal->options.max_file_size);
+        wal->mmap_buf = NULL;
+    }
+}
 int swal_reset(swal_t* wal, size_t offset, uint64_t cksm)
 {
     wal->meta->log_start_offset = offset;
@@ -382,10 +392,7 @@ int swal_close(swal_t* wal)
     {
         munmap(wal->meta, wal->options.user_meta_size + SWAL_META_SIZE);
     }
-    if (NULL != wal->mmap_buf)
-    {
-        munmap(wal->mmap_buf, wal->options.max_file_size);
-    }
+    swal_clear_replay_cache(wal);
     free(wal->dir);
     free(wal);
     return 0;
