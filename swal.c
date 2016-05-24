@@ -290,19 +290,19 @@ int swal_replay(swal_t* wal, size_t offset, int64_t limit_len, swal_replay_logfu
     {
         total = limit_len;
     }
+    size_t data_len = wal->meta->log_end_offset - offset;
     if (NULL != wal->ring_cache)
     {
         if (offset >= wal->ring_cache_start_offset)
         {
             size_t cache_end_idx = wal->ring_cache_idx;
-            size_t cache_len = wal->meta->log_end_offset - offset;
-            if (wal->ring_cache_idx >= cache_len)
+            if (wal->ring_cache_idx >= data_len)
             {
-                func(wal->ring_cache + wal->ring_cache_idx - cache_len, total, data);
+                func(wal->ring_cache + wal->ring_cache_idx - data_len, total, data);
             }
             else
             {
-                size_t start_pos = wal->options.ring_cache_size - cache_len + wal->ring_cache_idx;
+                size_t start_pos = wal->options.ring_cache_size - data_len + wal->ring_cache_idx;
                 if (total <= wal->options.ring_cache_size - start_pos)
                 {
                     func(wal->ring_cache + start_pos, total, data);
@@ -320,23 +320,23 @@ int swal_replay(swal_t* wal, size_t offset, int64_t limit_len, swal_replay_logfu
     {
         wal->mmap_buf = (char*) mmap(NULL, wal->options.max_file_size, PROT_READ, MAP_SHARED, wal->fd, 0);
     }
-    size_t data_len = wal->meta->log_end_offset - offset;
-    if (wal->meta->log_file_pos >= data_len)
+    size_t start_pos = wal->meta->log_file_pos;
+    if(wal->meta->log_file_pos >= data_len)
     {
-        func(wal->mmap_buf + wal->meta->log_file_pos - data_len, total, data);
+        start_pos = wal->meta->log_file_pos - data_len;
     }
     else
     {
-        size_t start_pos = wal->options.max_file_size - total + wal->meta->log_file_pos;
-        if (total <= wal->options.max_file_size - start_pos)
-        {
-            func(wal->mmap_buf + start_pos, total, data);
-        }
-        else
-        {
-            func(wal->mmap_buf + start_pos, wal->options.max_file_size - start_pos, data);
-            func(wal->mmap_buf, start_pos + total - wal->options.max_file_size, data);
-        }
+        start_pos = wal->options.max_file_size - data_len + wal->meta->log_file_pos;
+    }
+    if ((start_pos + total) < wal->options.max_file_size)
+    {
+        func(wal->mmap_buf + start_pos, total, data);
+    }
+    else
+    {
+        func(wal->mmap_buf + start_pos, wal->options.max_file_size - start_pos, data);
+        func(wal->mmap_buf, total + start_pos - wal->options.max_file_size, data);
     }
     return 0;
 }
@@ -346,6 +346,7 @@ int swal_clear_replay_cache(swal_t* wal)
     {
         munmap(wal->mmap_buf, wal->options.max_file_size);
         wal->mmap_buf = NULL;
+        return 1;
     }
     return 0;
 }
